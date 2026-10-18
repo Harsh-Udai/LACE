@@ -1,0 +1,428 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta property="og:title" content="LACE: Latent Alignment via Counterfactual Embeddings">
+<meta property="og:image" content="assets/method.png">
+<title>LACE · NeurIPS 2026</title>
+<meta name="description" content="LACE: Latent Alignment via Counterfactual Embeddings. Image- and text-side hard negatives built in embedding space for compositional CLIP training. NeurIPS 2026.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one reading column (≈66ch) that breaks out to a wide band for figures and the demo.
+   Color logic follows the paper's own figures: plum = source concept, teal = target concept. */
+:root {
+  --paper:   #f6f7f9;
+  --surface: #ffffff;
+  --ink:     #17202e;
+  --muted:   #5b6575;
+  --rule:    #dde1e8;
+  --source:  #9b2f6e;   /* plum: what gets edited away */
+  --target:  #0f7a78;   /* teal: what gets transplanted in */
+  --source-soft: #f6e6ef;
+  --target-soft: #e0f2f1;
+  --obj: #8fb8e6; --attr: #f2b67d; --rel: #a9d58a;
+
+  --display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  --body:    "Newsreader", "Iowan Old Style", Georgia, serif;
+  --mono:    "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+
+  --read: 40rem;
+  --wide: 68rem;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #10141b; --surface: #171d26; --ink: #e8ebf0; --muted: #9aa4b4; --rule: #2a3240;
+    --source: #e07ab3; --target: #4cc7c2; --source-soft: #3a1f30; --target-soft: #13322f;
+    --obj: #5d86b3; --attr: #c48a52; --rel: #7aa65e;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #10141b; --surface: #171d26; --ink: #e8ebf0; --muted: #9aa4b4; --rule: #2a3240;
+  --source: #e07ab3; --target: #4cc7c2; --source-soft: #3a1f30; --target-soft: #13322f;
+  --obj: #5d86b3; --attr: #c48a52; --rel: #7aa65e;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; } img { max-width: 100%; }
+body {
+  background: var(--paper); color: var(--ink);
+  font-family: var(--body); font-size: 1.125rem; line-height: 1.65;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  -webkit-font-smoothing: antialiased;
+}
+main { display: flex; flex-direction: column; gap: 5.5rem; padding-block: 3.5rem 4rem; }
+.col  { width: 100%; max-width: var(--read); margin-inline: auto; }
+.wide { width: 100%; max-width: var(--wide); margin-inline: auto; }
+
+h1, h2, h3 { font-family: var(--display); text-wrap: balance; margin: 0; letter-spacing: -0.01em; }
+h2 { font-size: clamp(1.6rem, 3.2vw, 2.1rem); font-weight: 600; line-height: 1.15; }
+h3 { font-size: 1.15rem; font-weight: 600; }
+p { margin: 0; }
+.stack { display: flex; flex-direction: column; gap: 1.1rem; }
+.label {
+  font-family: var(--mono); font-size: 0.72rem; text-transform: uppercase;
+  letter-spacing: 0.12em; color: var(--muted);
+}
+a { color: var(--target); text-underline-offset: 3px; }
+a:focus-visible, button:focus-visible { outline: 2px solid var(--target); outline-offset: 3px; border-radius: 4px; }
+em.s { font-style: normal; color: var(--source); font-weight: 500; }
+em.t { font-style: normal; color: var(--target); font-weight: 500; }
+
+/* ---------- Hero ---------- */
+.hero { display: flex; flex-direction: column; gap: 1.75rem; }
+.venue { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; align-items: center; }
+.venue .pill {
+  font-family: var(--mono); font-size: 0.75rem; letter-spacing: 0.06em;
+  padding: 0.25rem 0.6rem; border: 1px solid var(--ink); border-radius: 999px;
+}
+.wordmark {
+  font-family: var(--display); font-weight: 800;
+  font-size: clamp(4.5rem, 16vw, 9.5rem); line-height: 0.85; letter-spacing: -0.045em;
+}
+.wordmark .sub { display: block; font-size: clamp(1.25rem, 3vw, 1.9rem); font-weight: 400; letter-spacing: -0.01em; line-height: 1.2; margin-top: 1rem; color: var(--muted); }
+.authors { font-family: var(--display); font-size: 1.1rem; display: flex; flex-direction: column; gap: 0.2rem; }
+.authors b { font-weight: 600; }
+.authors span { color: var(--muted); font-size: 0.95rem; }
+.actions { display: flex; flex-wrap: wrap; gap: 0.6rem; }
+.btn {
+  font-family: var(--display); font-size: 0.95rem; font-weight: 600;
+  display: inline-flex; align-items: center; gap: 0.45rem;
+  padding: 0.6rem 1rem; border-radius: 8px; text-decoration: none;
+  background: var(--ink); color: var(--paper); border: 1px solid var(--ink);
+}
+.btn.ghost { background: transparent; color: var(--ink); }
+.btn.soon { background: transparent; color: var(--muted); border: 1px dashed var(--rule); cursor: default; }
+.btn.soon small { font-family: var(--mono); font-size: 0.68rem; letter-spacing: 0.06em; text-transform: uppercase; }
+
+/* the two captions, one binding apart */
+.pair {
+  display: grid; grid-template-columns: 1fr auto 1fr; gap: 1rem; align-items: center;
+  border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); padding-block: 1.25rem;
+}
+.pair p { font-family: var(--display); font-size: clamp(1rem, 2.4vw, 1.3rem); line-height: 1.35; }
+.pair .ne { font-family: var(--mono); font-size: 1.4rem; color: var(--muted); }
+.red   { color: #c8373b; } .black { background: var(--ink); color: var(--paper); padding: 0 0.25em; border-radius: 3px; }
+@media (max-width: 560px) { .pair { grid-template-columns: 1fr; text-align: left; } .pair .ne { display: none; } }
+
+.tldr { font-size: 1.3rem; line-height: 1.55; }
+
+/* ---------- Figures ---------- */
+figure { margin: 0; display: flex; flex-direction: column; gap: 0.9rem; }
+figure .frame {
+  background: #fff; border: 1px solid var(--rule); border-radius: 10px; padding: clamp(0.75rem, 2vw, 1.5rem);
+  overflow-x: auto;
+}
+figure img { display: block; width: 100%; height: auto; min-width: 540px; }
+figcaption { font-size: 0.95rem; color: var(--muted); max-width: var(--read); }
+figcaption b { color: var(--ink); font-weight: 500; }
+
+/* ---------- Steps ---------- */
+.steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 2rem; }
+.step { display: flex; flex-direction: column; gap: 0.5rem; border-top: 2px solid var(--ink); padding-top: 0.9rem; }
+.step .label { color: var(--ink); }
+.step p { font-size: 1rem; }
+@media (max-width: 760px) { .steps { grid-template-columns: 1fr; gap: 1.5rem; } }
+
+/* ---------- Demo ---------- */
+.demo {
+  background: var(--surface); border: 1px solid var(--rule); border-radius: 14px;
+  padding: clamp(1rem, 3vw, 2rem); display: grid; grid-template-columns: minmax(0, 15rem) minmax(0, 1fr); gap: 2rem;
+}
+@media (max-width: 760px) { .demo { grid-template-columns: 1fr; } }
+.ops { display: flex; flex-direction: column; gap: 0.6rem; }
+.op {
+  text-align: left; font: inherit; font-family: var(--display); font-size: 0.98rem;
+  padding: 0.75rem 0.9rem; border-radius: 8px; cursor: pointer;
+  background: transparent; color: var(--ink); border: 1px solid var(--rule);
+  display: flex; flex-direction: column; gap: 0.15rem;
+}
+.op small { font-family: var(--mono); font-size: 0.72rem; color: var(--muted); }
+.op:hover { border-color: var(--ink); }
+.op[aria-pressed="true"] { border-color: var(--target); background: var(--target-soft); }
+.bars { display: flex; flex-direction: column; gap: 0.55rem; min-width: 0; }
+.barrow { display: grid; grid-template-columns: 7.5rem minmax(0, 1fr) 3.2rem; gap: 0.75rem; align-items: center; font-family: var(--mono); font-size: 0.82rem; }
+.barrow .name { display: flex; align-items: center; gap: 0.45rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: color 0.3s; }
+.barrow .dot { width: 0.6rem; height: 0.6rem; border-radius: 2px; flex: none; }
+.track { height: 0.9rem; background: var(--paper); border-radius: 3px; overflow: hidden; }
+.fill { height: 100%; border-radius: 3px; transition: width 0.55s cubic-bezier(.2,.7,.2,1), background-color 0.3s; }
+.val { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
+.barrow.changed-out .name { color: var(--source); text-decoration: line-through; }
+.barrow.changed-in .name { color: var(--target); font-weight: 600; }
+.legend { display: flex; flex-wrap: wrap; gap: 1rem; font-family: var(--mono); font-size: 0.72rem; color: var(--muted); margin-top: 0.4rem; }
+.legend span { display: inline-flex; align-items: center; gap: 0.35rem; }
+.readout { font-size: 1rem; min-height: 3.2em; border-left: 2px solid var(--target); padding-left: 0.9rem; }
+@media (max-width: 420px) { .barrow { grid-template-columns: 6rem minmax(0,1fr) 2.8rem; } }
+
+/* ---------- Findings ---------- */
+.findings { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2.25rem 2.5rem; }
+@media (max-width: 680px) { .findings { grid-template-columns: 1fr; } }
+.finding { display: flex; flex-direction: column; gap: 0.55rem; }
+.delta { font-family: var(--mono); font-size: 0.95rem; display: flex; align-items: baseline; gap: 0.5rem; flex-wrap: wrap; font-variant-numeric: tabular-nums; }
+.delta .from { color: var(--muted); }
+.delta .to { color: var(--target); font-weight: 600; font-size: 1.35rem; }
+.finding p { font-size: 1rem; }
+.note { font-size: 0.9rem; color: var(--muted); }
+
+/* ---------- BibTeX ---------- */
+.bib { position: relative; background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; }
+.bib pre { margin: 0; padding: 1.25rem 1.25rem; overflow-x: auto; font-family: var(--mono); font-size: 0.82rem; line-height: 1.6; }
+.copy {
+  position: absolute; top: 0.6rem; right: 0.6rem; font-family: var(--mono); font-size: 0.72rem;
+  padding: 0.35rem 0.6rem; border-radius: 6px; border: 1px solid var(--rule); background: var(--paper); color: var(--ink); cursor: pointer;
+}
+
+footer { border-top: 1px solid var(--rule); padding-block: 2rem 3rem; }
+footer .col { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 1rem; font-size: 0.9rem; color: var(--muted); }
+footer code { font-family: var(--mono); font-size: 0.85rem; color: var(--ink); user-select: all; }
+
+@media (prefers-reduced-motion: reduce) { .fill, .barrow .name { transition: none; } }
+</style>
+</head>
+<body>
+
+<main>
+  <!-- HERO -->
+  <header class="col hero">
+    <div class="venue">
+      <span class="pill">NeurIPS 2026</span>
+      <span class="label">Vision–language · Compositionality</span>
+    </div>
+    <h1 class="wordmark">LACE
+      <span class="sub">Latent Alignment via Counterfactual Embeddings</span>
+    </h1>
+    <div class="authors">
+      <div><b>Harsh Udai</b> &nbsp;·&nbsp; <b>Konda Reddy Mopuri</b></div>
+      <span>Department of Artificial Intelligence, IIT Hyderabad</span>
+    </div>
+    <div class="actions">
+      <span class="btn soon" aria-disabled="true">Paper <small>soon</small></span>
+      <span class="btn soon" aria-disabled="true">Code <small>soon</small></span>
+      <a class="btn" href="#bibtex">BibTeX</a>
+    </div>
+  </header>
+
+  <!-- THE PROBLEM, IN ONE LINE -->
+  <section class="col stack" aria-labelledby="problem">
+    <span class="label" id="problem">The problem</span>
+    <div class="pair">
+      <p>a <span class="red">red</span> suitcase next to a <span class="black">black</span> backpack</p>
+      <span class="ne" aria-hidden="true">≠</span>
+      <p>a <span class="black">black</span> suitcase next to a <span class="red">red</span> backpack</p>
+    </div>
+    <p class="tldr">Same objects, same colors, different scene. CLIP-style models often score these two captions almost the same, because their training never forces them to bind each attribute to the right object.</p>
+    <p>The common fix adds hard negatives on the text side only: swapped, negated, or perturbed captions. The text encoder learns the fine distinctions, but the image encoder never sees a matching near-miss. The shared embedding space becomes lopsided. A few points turn into hubs that crowd out correct matches, neighbors stop agreeing in both directions, and small edits cause brittle failures, even when retrieval scores look healthy.</p>
+  </section>
+
+  <!-- METHOD -->
+  <section class="wide stack" aria-labelledby="method" style="gap:2rem">
+    <div class="col stack" style="margin:0 auto">
+      <span class="label">Method</span>
+      <h2 id="method">Hard negatives for both modalities, made in embedding space</h2>
+      <p>LACE edits embeddings instead of pixels. It needs no diffusion model, no image editor, and no retrieval mining, so image-side counterfactuals become as cheap as text-side ones.</p>
+    </div>
+    <figure>
+      <div class="frame"><img src="assets/method.png" alt="Diagram: a concept set of attributes, objects and relations passes through the CLIP text encoder to form a concept dictionary D; multiplied by sparse weights alpha, it reconstructs a counterfactual embedding z_cf." width="1581" height="644"></div>
+      <figcaption><b>A shared concept dictionary.</b> Object, attribute, and relation concepts are embedded once to form a fixed dictionary D. Any image or text embedding is then explained by a sparse weight vector α over these atoms, and editing that explanation yields a counterfactual embedding.</figcaption>
+    </figure>
+    <div class="steps">
+      <div class="step">
+        <span class="label">Step 1 · Decompose</span>
+        <h3>Find the concepts in play</h3>
+        <p>Sparse coding writes each embedding as a few active atoms, such as <i>sheep</i>, <i>grass</i>, <i>white</i>, <i>on</i>. Only atoms that are both strongly used and semantically aligned are allowed to be edited.</p>
+      </div>
+      <div class="step">
+        <span class="label">Step 2 · Edit</span>
+        <h3>Change one thing</h3>
+        <p>Attenuate, swap, or transplant a single concept with another of the same type: <em class="s">sheep</em> → <em class="t">zebra</em>, <em class="s">red</em> → <em class="t">blue</em>. The rest of the scene stays as it was.</p>
+      </div>
+      <div class="step">
+        <span class="label">Step 3 · Contrast</span>
+        <h3>Train both sides</h3>
+        <p>Edited captions become negatives for image→text retrieval, and edited images become negatives for text→image retrieval. At test time all of this is gone: it is a plain dual encoder.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- INTERACTIVE -->
+  <section class="wide stack" aria-labelledby="try" style="gap:1.75rem">
+    <div class="col stack" style="margin:0 auto">
+      <span class="label">Try the operator</span>
+      <h2 id="try">Three ways to make a near-miss</h2>
+      <p>The bars show the active atoms of an image embedding for a photo of sheep in a field. Pick an edit to see how LACE changes the sparse code before rebuilding the embedding. Values are illustrative.</p>
+    </div>
+    <div class="demo">
+      <div class="ops" role="group" aria-label="Edit operator">
+        <button class="op" id="op-orig" data-op="orig" aria-pressed="true">Original<small>α for z = image embedding</small></button>
+        <button class="op" id="op-att" data-op="att" aria-pressed="false">Attenuate<small>weaken “sheep”</small></button>
+        <button class="op" id="op-swap" data-op="swap" aria-pressed="false">Swap<small>move “white” → “black”</small></button>
+        <button class="op" id="op-trans" data-op="trans" aria-pressed="false">Transplant<small>replace “sheep” with “zebra”</small></button>
+      </div>
+      <div class="stack" style="gap:1rem; min-width:0">
+        <div class="bars" id="bars" aria-live="polite"></div>
+        <div class="legend">
+          <span><i class="dot" style="background:var(--obj);width:.6rem;height:.6rem;border-radius:2px;display:inline-block"></i>object</span>
+          <span><i class="dot" style="background:var(--attr);width:.6rem;height:.6rem;border-radius:2px;display:inline-block"></i>attribute</span>
+          <span><i class="dot" style="background:var(--rel);width:.6rem;height:.6rem;border-radius:2px;display:inline-block"></i>relation</span>
+        </div>
+        <p class="readout" id="readout"></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- QUALITATIVE -->
+  <section class="wide stack" aria-labelledby="qual" style="gap:2rem">
+    <div class="col stack" style="margin:0 auto">
+      <span class="label">Do the edits mean anything?</span>
+      <h2 id="qual">Edited embeddings retrieve the new concept</h2>
+      <p>We transplant a concept inside a real COCO image embedding and look up its nearest real images. Before the edit, neighbors show the <em class="s">source</em> concept. After it, they show the <em class="t">target</em>, and the surrounding context (grass, plates, tables) stays. A random edit of the same size never retrieves the target.</p>
+    </div>
+    <figure>
+      <div class="frame"><img src="assets/transplant.png" alt="Top-3 nearest COCO images before and after latent transplants. Sheep to zebra: three sheep photos become one sheep and two zebras. Donut to broccoli: three donut photos become three broccoli photos." width="1669" height="626" loading="lazy"></div>
+      <figcaption><b>Latent transplants on COCO.</b> T marks target evidence, S source evidence, and C preserved context. Counts below each row are over the full top-10 neighborhood.</figcaption>
+    </figure>
+  </section>
+
+  <!-- FINDINGS -->
+  <section class="col stack" aria-labelledby="results" style="gap:2rem">
+    <div class="stack">
+      <span class="label">Results</span>
+      <h2 id="results">What the counterfactuals add</h2>
+      <p>Every comparison below holds everything fixed (backbone, data, LoRA setup, optimizer, schedule) and changes only whether LACE's counterfactuals are used.</p>
+    </div>
+    <div class="findings">
+      <div class="finding">
+        <h3>Multi-object binding</h3>
+        <div class="delta"><span class="from">35.56</span>→<span class="to">39.05</span><span class="label">COLA</span></div>
+        <p>Better at telling scenes apart when the same objects and attributes are bound differently.</p>
+      </div>
+      <div class="finding">
+        <h3>Fine visual detail</h3>
+        <div class="delta"><span class="from">29.62</span>→<span class="to">35.56</span><span class="label">MMVP-VLM</span></div>
+        <p>Image-side negatives sharpen the vision encoder on color, viewpoint, and state.</p>
+      </div>
+      <div class="finding">
+        <h3>Fewer brittle failures</h3>
+        <div class="delta"><span class="from">3.27%</span>→<span class="to">1.10%</span><span class="label">relation swaps</span></div>
+        <p>About three times fewer cases where an edited caption still wins over the true one. Attribute swaps drop from 4.65% to 1.60%.</p>
+      </div>
+      <div class="finding">
+        <h3>Beyond CLIP's loss</h3>
+        <div class="delta"><span class="from">45.83</span>→<span class="to">49.46</span><span class="label">SigLIP avg.</span></div>
+        <p>The same generator works with SigLIP's pairwise sigmoid objective, improving every benchmark we report.</p>
+      </div>
+    </div>
+    <p class="note">The shared space also gets healthier: mutual reciprocity rises from 46.57% to 51.41% and hubness falls. The paper has full benchmark results, comparisons with prior compositional methods, and ablations.</p>
+  </section>
+
+  <!-- BIBTEX -->
+  <section class="col stack" aria-labelledby="bibtex">
+    <span class="label">Cite</span>
+    <h2 id="bibtex">BibTeX</h2>
+    <div class="bib">
+      <button class="copy" id="copy-bib" type="button">Copy</button>
+<pre id="bibtext">@inproceedings{udai2026lace,
+  title     = {{LACE}: Latent Alignment via Counterfactual Embeddings},
+  author    = {Udai, Harsh and Mopuri, Konda Reddy},
+  booktitle = {Advances in Neural Information Processing Systems},
+  year      = {2026}
+}</pre>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="col">
+    <span>LACE · NeurIPS 2026 · IIT Hyderabad</span>
+    <span>Contact: <code>ai23resch11003@iith.ac.in</code></span>
+  </div>
+</footer>
+
+<script>
+(function () {
+  var C = { o: "var(--obj)", a: "var(--attr)", r: "var(--rel)" };
+  var base = [
+    { k: "sheep", t: "o", v: 0.42 },
+    { k: "grass", t: "o", v: 0.24 },
+    { k: "white", t: "a", v: 0.16 },
+    { k: "field", t: "o", v: 0.11 },
+    { k: "standing on", t: "r", v: 0.07 },
+    { k: "fluffy", t: "a", v: 0.05 }
+  ];
+  var states = {
+    orig: {
+      rows: base,
+      text: "The sparse code of the original image embedding. Most of the weight sits on a handful of atoms."
+    },
+    att: {
+      rows: base.map(function (r) { return r.k === "sheep" ? { k: r.k, t: r.t, v: 0.09, out: true } : r; }),
+      text: "Attenuation turns the source concept down. The scene stays, but the evidence for the main object is weakened."
+    },
+    swap: {
+      rows: base.map(function (r) { return r.k === "white" ? { k: "black", t: r.t, v: r.v, inn: true, was: "white" } : r; }),
+      text: "Swap moves the activation from one attribute to another of the same type. Same sheep, same field, wrong color."
+    },
+    trans: {
+      rows: base.map(function (r) { return r.k === "sheep" ? { k: "zebra", t: r.t, v: r.v, inn: true, was: "sheep" } : r; }),
+      text: "Transplant replaces the source atom with the target and keeps the original strength. In the COCO example, the result has cosine 0.78 to the original and retrieves zebras."
+    }
+  };
+  var bars = document.getElementById("bars");
+  var readout = document.getElementById("readout");
+  var max = 0.45;
+
+  // build rows once so widths can animate
+  base.forEach(function (r, i) {
+    var row = document.createElement("div");
+    row.className = "barrow";
+    row.innerHTML = '<span class="name"><i class="dot"></i><span class="lbl"></span></span>' +
+      '<div class="track"><div class="fill"></div></div><span class="val"></span>';
+    bars.appendChild(row);
+  });
+
+  function render(key) {
+    var s = states[key];
+    Array.prototype.forEach.call(bars.children, function (row, i) {
+      var r = s.rows[i];
+      row.className = "barrow" + (r.inn ? " changed-in" : "") + (r.out ? " changed-out" : "");
+      row.querySelector(".dot").style.background = C[r.t];
+      row.querySelector(".lbl").textContent = r.inn ? r.was + " → " + r.k : r.k;
+      var f = row.querySelector(".fill");
+      f.style.width = (r.v / max * 100) + "%";
+      f.style.backgroundColor = r.inn ? "var(--target)" : (r.out ? "var(--source)" : C[r.t]);
+      row.querySelector(".val").textContent = r.v.toFixed(2);
+    });
+    readout.textContent = s.text;
+    document.querySelectorAll(".op").forEach(function (b) {
+      b.setAttribute("aria-pressed", b.dataset.op === key ? "true" : "false");
+    });
+  }
+  document.querySelectorAll(".op").forEach(function (b) {
+    b.addEventListener("click", function () { render(b.dataset.op); });
+  });
+  render("orig");
+
+  var btn = document.getElementById("copy-bib");
+  btn.addEventListener("click", function () {
+    var text = document.getElementById("bibtext").textContent;
+    function selectIt() {
+      var range = document.createRange();
+      range.selectNodeContents(document.getElementById("bibtext"));
+      var sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(range);
+      btn.textContent = "Selected";
+    }
+    try {
+      navigator.clipboard.writeText(text).then(function () { btn.textContent = "Copied"; }, selectIt);
+    } catch (e) { selectIt(); }
+    setTimeout(function () { btn.textContent = "Copy"; }, 1800);
+  });
+})();
+</script>
+
+</body>
+</html>
