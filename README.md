@@ -1,90 +1,111 @@
-# LACE: Latent Alignment via Counterfactual Embeddings
+<div align="center">
 
-**Harsh Udai, Konda Reddy Mopuri**
+# LACE
+
+### Latent Alignment via Counterfactual Embeddings
+
+**[Harsh Udai](mailto:ai23resch11003@iith.ac.in) · [Konda Reddy Mopuri](mailto:krmopuri@ai.iith.ac.in)**
+
 Department of Artificial Intelligence, IIT Hyderabad
 
-*NeurIPS 2026*
+<br>
 
-[Paper (coming soon)] · [OpenReview (coming soon)] · [Code: coming soon]
+![NeurIPS 2026](https://img.shields.io/badge/NeurIPS-2026-4b44ce?style=for-the-badge)
+![Paper](https://img.shields.io/badge/Paper-coming%20soon-b31b1b?style=for-the-badge)
+![Code](https://img.shields.io/badge/Code-coming%20soon-lightgrey?style=for-the-badge)
+![License](https://img.shields.io/badge/License-MIT-2ea44f?style=for-the-badge)
 
-> 🚧 **Code release in progress.** This repository currently hosts the project overview. Training, evaluation, and dictionary-construction code will be released here shortly. Watch or star the repo to be notified.
+<br>
 
----
+*Teaching CLIP-style models **which** attribute belongs to **which** object,<br>
+with hard negatives built in embedding space, for both images and text.*
 
-## Overview
+</div>
 
-CLIP-style vision–language models align images and text well at a coarse level, but often fail on **compositional** distinctions, such as telling *"a red suitcase next to a black backpack"* apart from *"a black suitcase next to a red backpack."*
+<br>
 
-The common fix is to add **text-side hard negatives** (caption swaps, negations, perturbations). This puts all the fine-grained pressure on the text branch. The image branch gets no comparable near-miss signal, which can distort the shared embedding space: hubness goes up and neighborhood reciprocity goes down, even when Recall@K improves.
+> [!NOTE]
+> **Code release in progress.** This repository currently hosts the project overview. Dictionary construction, training, and evaluation code will be released here soon. Star or watch the repo to get notified.
 
-**LACE** generates **counterfactual hard negatives for both modalities directly in embedding space**. It needs no pixel editing, diffusion models, or retrieval mining.
+<br>
 
-1. **Sparse concept decomposition.** Each image or text embedding is expressed as a sparse mixture of atoms from a fixed dictionary of object, attribute, and relation concepts.
-2. **Latent counterfactual synthesis.** A small active support is edited by attenuation, swap, or transplant to a same-type concept. The embedding is then reconstructed, giving a targeted near-miss that preserves the surrounding context.
-3. **Symmetric training.** Text-side counterfactuals are negatives for image→text retrieval, and image-side counterfactuals are negatives for text→image retrieval.
+## ✦ The problem
 
-LACE changes **only training**. At inference the model is a standard dual encoder, with no dictionary lookup, sparse solver, or extra module.
+Vision–language models like CLIP know *what* is in an image, but often not *how it fits together*. They struggle to tell
 
-## Highlights
+> *"a **red** suitcase next to a **black** backpack"* &nbsp;from&nbsp; *"a **black** suitcase next to a **red** backpack"*
 
-- **Image- and text-side hard negatives** from a single latent editing operator, generated on the fly
-- **Better compositionality** on COLA, What'sUp, Winoground, SugarCrepe/SugarCrepe++, and MMVP-VLM
-- **Healthier embedding geometry**: higher mutual reciprocity, lower hubness, fewer brittle local edits
-- **Works across objectives**: softmax InfoNCE (OpenCLIP) and pairwise sigmoid (SigLIP)
-- **No inference overhead**
+The usual fix is to add **text-side hard negatives**: swapped, negated, or perturbed captions. That puts all the fine-grained pressure on the text encoder. The image encoder never sees a comparable near-miss, so the shared embedding space becomes lopsided: more hubs, fewer reciprocal neighbors, and brittle behavior under small edits, even when retrieval scores look fine.
 
-## Results
+<br>
 
-### Controlled comparison (OpenCLIP ViT-B/32, MS-COCO fine-tuning)
+## ✦ The idea
 
-Same initialization, data, LoRA configuration, optimizer, and schedule. The only difference is LACE's counterfactual supervision.
+LACE builds **counterfactual hard negatives for both modalities, directly in embedding space**. It uses no pixel editing, no diffusion models, and no retrieval mining.
 
-| Model | What'sUp | COLA | Winoground | SC | SC++ | MMVP-VLM | Avg. |
-|---|---|---|---|---|---|---|---|
-| Matched fine-tuning | 42.12 | 35.56 | 15.83 | 82.80 | 64.30 | 29.62 | 45.04 |
-| **+ LACE** | **43.56** | **39.05** | **17.42** | **83.52** | **65.22** | **35.56** | **47.39** |
+<p align="center">
+  <img src="assets/method.png" width="92%" alt="LACE method overview: concept dictionary, sparse weights, and counterfactual embedding">
+</p>
 
-### Cross-objective: SigLIP ViT-B/16
+**① Decompose.** Each image or text embedding is written as a sparse mix of atoms from a fixed dictionary of *object*, *attribute*, and *relation* concepts.
 
-| Model | What'sUp | COLA | Winoground | SC | SC++ | MMVP-VLM | Avg. |
-|---|---|---|---|---|---|---|---|
-| SigLIP fine-tuning | 45.00 | 35.00 | 18.00 | 80.00 | 65.00 | 32.00 | 45.83 |
-| **+ LACE** | **47.00** | **41.00** | **19.00** | **84.00** | **68.00** | **37.78** | **49.46** |
+**② Edit.** A few active concepts are attenuated, swapped, or transplanted with a same-type concept (e.g. *sheep → zebra*). The embedding is then rebuilt, giving a targeted near-miss that keeps the rest of the scene intact.
 
-### Embedding geometry (CC3M-50k, K = 10)
+**③ Train symmetrically.** Edited text embeddings serve as negatives for image→text retrieval, and edited image embeddings serve as negatives for text→image retrieval. Both encoders learn to resolve the fine-grained difference.
 
-| Model | Mutual@10 ↑ | Edge recip.@10 ↑ | I2T Gini ↓ | Relation-swap brittle ↓ | Attribute-swap brittle ↓ |
-|---|---|---|---|---|---|
-| Matched fine-tuning | 46.57 | 52.46 | 0.480 | 3.27% | 4.65% |
-| **+ LACE** | **51.41** | **53.79** | **0.455** | **1.10%** | **1.60%** |
+At inference, LACE disappears: the model is a **standard dual encoder** with no dictionary, solver, or extra module.
 
-See the paper for full comparisons with DAC, CLoVe, CE-CLIP, FSC-CLIP, CLIC, NegCLIP, and TripletCLIP, plus ablations and per-split results.
+<br>
 
-## Planned code release
+## ✦ Edits that mean something
+
+Transplanting a single concept in latent space moves an image's nearest neighbors to the target concept while preserving the surrounding context. A random edit of the same size does nothing of the sort.
+
+<p align="center">
+  <img src="assets/transplant.png" width="92%" alt="Nearest COCO neighbors before and after latent transplants: sheep to zebra, donut to broccoli">
+</p>
+
+<br>
+
+## ✦ Highlights
+
+- 🧩 **Two-sided hard negatives** from a single latent editing operator, generated on the fly during training
+- 🎯 **Stronger compositional reasoning** on COLA, What'sUp, Winoground, SugarCrepe / SugarCrepe++, and MMVP-VLM, with the largest gains in multi-object binding and fine-grained visual patterns
+- 🕸️ **Healthier embedding geometry**: higher neighborhood reciprocity, lower hubness, and roughly **3× fewer brittle failures** under relation and attribute swaps than matched fine-tuning
+- 🔁 **Works across objectives**: softmax InfoNCE (OpenCLIP ViT-B/32) and pairwise sigmoid (SigLIP ViT-B/16)
+- ⚡ **Zero inference overhead**: changes training only
+
+See the paper for full results, comparisons with prior compositional methods, and ablations.
+
+<br>
+
+## ✦ Roadmap
 
 ```
 LACE/
-├── configs/              # OpenCLIP and SigLIP training configs
-├── dictionary/           # concept extraction (spaCy + VLM), filtering, embedding
+├── configs/              OpenCLIP and SigLIP training configs
+├── dictionary/           concept extraction, filtering, embedding
 ├── lace/
-│   ├── sparse_coding.py  # batched FISTA / LASSO solver
-│   ├── counterfactual.py # editable-set filtering, attenuation / swap / transplant
-│   └── losses.py         # symmetric InfoNCE and SigLIP counterfactual losses
-├── train.py              # LoRA fine-tuning (Accelerate)
-├── eval/                 # compositional benchmarks, retrieval, zero-shot
-└── geometry/             # hubness, reciprocity, local-edit diagnostics
+│   ├── sparse_coding.py  batched FISTA / LASSO solver
+│   ├── counterfactual.py editable-set filtering, attenuate / swap / transplant
+│   └── losses.py         symmetric InfoNCE and SigLIP counterfactual losses
+├── train.py              LoRA fine-tuning with Accelerate
+├── eval/                 compositional benchmarks, retrieval, zero-shot
+└── geometry/             hubness, reciprocity, local-edit diagnostics
 ```
 
-- [ ] Concept dictionary construction scripts and released dictionaries
+- [ ] Concept dictionary construction and released dictionaries
 - [ ] Sparse coding and counterfactual generation
 - [ ] OpenCLIP and SigLIP training code
-- [ ] Evaluation on COLA, What'sUp, Winoground, SugarCrepe/SugarCrepe++, MMVP-VLM, retrieval, ImageNetV2
-- [ ] Geometry diagnostics (hubness, reciprocity, local edit stability)
+- [ ] Evaluation suite: COLA, What'sUp, Winoground, SugarCrepe / SugarCrepe++, MMVP-VLM, retrieval, ImageNetV2
+- [ ] Geometry diagnostics: hubness, reciprocity, local edit stability
 - [ ] Trained LoRA checkpoints
 
-## Citation
+<br>
 
-If you find this work useful, please cite:
+## ✦ Citation
+
+If LACE is useful in your work, please cite:
 
 ```bibtex
 @inproceedings{udai2026lace,
@@ -95,15 +116,18 @@ If you find this work useful, please cite:
 }
 ```
 
-## Acknowledgments
+<br>
 
-This work builds on [OpenCLIP](https://github.com/mlfoundations/open_clip), [SigLIP](https://arxiv.org/abs/2303.15343), and the public compositionality benchmarks listed above. We thank their authors for releasing code and data.
+## ✦ Acknowledgments
 
-## License
+LACE builds on [OpenCLIP](https://github.com/mlfoundations/open_clip) and [SigLIP](https://arxiv.org/abs/2303.15343), and is evaluated on public compositionality benchmarks. We thank their authors for releasing code and data.
 
-This project is released under the [MIT License](LICENSE). Datasets, benchmarks, and pretrained checkpoints used with this code remain under their own licenses.
+## ✦ License
 
-## Contact
+Released under the [MIT License](LICENSE). Datasets, benchmarks, and pretrained checkpoints used with this code remain under their own licenses.
 
-Harsh Udai: ai23resch11003@iith.ac.in
-Konda Reddy Mopuri: krmopuri@ai.iith.ac.in
+<br>
+
+<div align="center">
+<sub>Questions? Open an issue or write to <a href="mailto:ai23resch11003@iith.ac.in">ai23resch11003@iith.ac.in</a></sub>
+</div>
