@@ -3,259 +3,434 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta property="og:title" content="LACE: Latent Alignment via Counterfactual Embeddings">
-<meta property="og:image" content="assets/method.png">
+<meta name="color-scheme" content="light">
 <title>LACE · NeurIPS 2026</title>
 <meta name="description" content="LACE: Latent Alignment via Counterfactual Embeddings. Image- and text-side hard negatives built in embedding space for compositional CLIP training. NeurIPS 2026.">
+<meta property="og:title" content="LACE: Latent Alignment via Counterfactual Embeddings (NeurIPS 2026)">
+<meta property="og:description" content="Edit the embedding, not the pixels: counterfactual negatives for both image and text.">
+<meta property="og:image" content="assets/method.png">
+<meta name="twitter:card" content="summary_large_image">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700;12..96,800&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
-/* Layout: one reading column (≈66ch) that breaks out to a wide band for figures and the demo.
-   Color logic follows the paper's own figures: plum = source concept, teal = target concept. */
+/* Layout: indigo header band with a drifting concept graph, TL;DR card overlapping its edge,
+   then a reading column (~680px) that widens to 1080px for figures, the demo and charts.
+   Colour logic: indigo = LACE / the edited-in target, warm red = what gets edited away,
+   blue / amber / rose = object / attribute / relation atoms. */
 :root {
-  --paper:   #f6f7f9;
-  --surface: #ffffff;
-  --ink:     #17202e;
-  --muted:   #5b6575;
-  --rule:    #dde1e8;
-  --source:  #9b2f6e;   /* plum: what gets edited away */
-  --target:  #0f7a78;   /* teal: what gets transplanted in */
-  --source-soft: #f6e6ef;
-  --target-soft: #e0f2f1;
-  --obj: #8fb8e6; --attr: #f2b67d; --rel: #a9d58a;
-
-  --display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", system-ui, sans-serif;
-  --body:    "Newsreader", "Iowan Old Style", Georgia, serif;
-  --mono:    "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
-
-  --read: 40rem;
-  --wide: 68rem;
+  --paper: #ffffff;
+  --soft: #f4f5f8;          /* tracks, buttons, insets on white */
+  --sheet: #ffffff;
+  --ink: #181b2c;
+  --muted: #5c6178;
+  --rule: #e3e5ec;
+  --acc: #3d42c2;          /* LACE + target concept */
+  --acc-tint: #e1e3fa;
+  --band: #ffffff;
+  --band-line: #e3e5ec;
+  --dot: 24, 27, 44;
+  --src: #d4573f;          /* source concept, struck out */
+  --src-tint: #f8e1db;
+  --base: #b4b7c8;
+  /* atoms: light chips + stronger bar fills */
+  --a-obj: #cfe0f5;  --f-obj: #7fa9df;
+  --a-att: #fbe3b0;  --f-att: #efb45a;
+  --a-rel: #f4d0dc;  --f-rel: #e38aa8;
+  --a-ctx: #d9eccd;
+  --sans: "Bricolage Grotesque", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  --serif: "Source Serif 4", "Iowan Old Style", Georgia, serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
   color-scheme: light;
 }
 
 * { box-sizing: border-box; }
-body { margin: 0; } img { max-width: 100%; }
+html { -webkit-text-size-adjust: 100%; }
 body {
-  background: var(--paper); color: var(--ink);
-  font-family: var(--body); font-size: 1.125rem; line-height: 1.65;
-  padding-left: max(16px, env(safe-area-inset-left, 0px));
-  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  margin: 0; background: var(--paper); color: var(--ink);
+  font-family: var(--serif); font-size: 18px; line-height: 1.7;
   -webkit-font-smoothing: antialiased;
 }
-main { display: flex; flex-direction: column; gap: 5.5rem; padding-block: 3.5rem 4rem; }
-.col  { width: 100%; max-width: var(--read); margin-inline: auto; }
-.wide { width: 100%; max-width: var(--wide); margin-inline: auto; }
-
-h1, h2, h3 { font-family: var(--display); text-wrap: balance; margin: 0; letter-spacing: -0.01em; }
-h2 { font-size: clamp(1.6rem, 3.2vw, 2.1rem); font-weight: 600; line-height: 1.15; }
-h3 { font-size: 1.15rem; font-weight: 600; }
+img { max-width: 100%; display: block; }
+a { color: inherit; text-underline-offset: 3px; text-decoration-thickness: 1px; }
+a:hover { color: var(--acc); }
+:focus-visible { outline: 2px solid var(--acc); outline-offset: 3px; border-radius: 4px; }
+h1, h2, h3 { font-family: var(--sans); text-wrap: balance; margin: 0; }
 p { margin: 0; }
-.stack { display: flex; flex-direction: column; gap: 1.1rem; }
-.label {
-  font-family: var(--mono); font-size: 0.72rem; text-transform: uppercase;
-  letter-spacing: 0.12em; color: var(--muted);
-}
-a { color: var(--target); text-underline-offset: 3px; }
-a:focus-visible, button:focus-visible { outline: 2px solid var(--target); outline-offset: 3px; border-radius: 4px; }
-em.s { font-style: normal; color: var(--source); font-weight: 500; }
-em.t { font-style: normal; color: var(--target); font-weight: 500; }
 
-/* ---------- Hero ---------- */
-.hero { display: flex; flex-direction: column; gap: 1.75rem; }
-.venue { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; align-items: center; }
-.venue .pill {
-  font-family: var(--mono); font-size: 0.75rem; letter-spacing: 0.06em;
-  padding: 0.25rem 0.6rem; border: 1px solid var(--ink); border-radius: 999px;
-}
-.wordmark {
-  font-family: var(--display); font-weight: 800;
-  font-size: clamp(4.5rem, 16vw, 9.5rem); line-height: 0.85; letter-spacing: -0.045em;
-}
-.wordmark .sub { display: block; font-size: clamp(1.25rem, 3vw, 1.9rem); font-weight: 400; letter-spacing: -0.01em; line-height: 1.2; margin-top: 1rem; color: var(--muted); }
-.authors { font-family: var(--display); font-size: 1.1rem; display: flex; flex-direction: column; gap: 0.2rem; }
-.authors b { font-weight: 600; }
-.authors span { color: var(--muted); font-size: 0.95rem; }
-.actions { display: flex; flex-wrap: wrap; gap: 0.6rem; }
+.wide { max-width: 1080px; margin: 0 auto; padding-left: max(24px, env(safe-area-inset-left, 0px)); padding-right: max(24px, env(safe-area-inset-right, 0px)); }
+.read { max-width: 680px; }
+.label { font-family: var(--mono); font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: var(--acc); display: block; margin-bottom: 10px; }
+em.s { font-style: normal; color: var(--src); font-weight: 600; }
+em.t { font-style: normal; color: var(--acc); font-weight: 600; }
+
+/* ---------- header ---------- */
+.hero-band { position: relative; overflow: hidden; background: var(--band); border-bottom: 1px solid var(--band-line); }
+.card, .plate, .bib pre { box-shadow: 0 0 0 1px var(--rule), 0 6px 18px -14px rgba(20, 22, 50, .25); }
+.hero-band canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.hero-inner { position: relative; padding-top: 44px; padding-bottom: 128px; text-align: center; }
+.hero-top { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; font-family: var(--sans); font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.hero-top span:first-child { display: inline-flex; align-items: center; gap: 8px; color: var(--acc); font-weight: 600; }
+.hero-top i { width: 8px; height: 8px; border-radius: 50%; background: var(--acc); }
+.mark { font-family: var(--sans); font-weight: 800; font-size: clamp(76px, 13vw, 140px); line-height: .9; letter-spacing: -0.02em; margin: 34px 0 0; }
+.mark span { color: var(--acc); }
+.expand { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; margin-top: 16px; font-family: var(--sans); font-size: 15px; }
+.expand span { padding: 4px 12px 5px; border-radius: 8px; color: var(--ink); }
+.tagline { font-family: var(--serif); font-size: clamp(19px, 2.4vw, 26px); line-height: 1.35; margin: 22px auto 0; max-width: 40ch; }
+.tagline i { display: block; color: var(--muted); }
+.authors { display: flex; justify-content: center; flex-wrap: wrap; gap: 4px 26px; font-family: var(--sans); font-size: 18px; margin-top: 24px; }
+.affil { font-family: var(--sans); font-size: 14.5px; color: var(--muted); margin-top: 4px; }
+.links { display: flex; justify-content: center; flex-wrap: wrap; gap: 10px; margin-top: 24px; }
 .btn {
-  font-family: var(--display); font-size: 0.95rem; font-weight: 600;
-  display: inline-flex; align-items: center; gap: 0.45rem;
-  padding: 0.6rem 1rem; border-radius: 8px; text-decoration: none;
-  background: var(--ink); color: var(--paper); border: 1px solid var(--ink);
+  font-family: var(--sans); font-size: 15px; font-weight: 600; text-decoration: none;
+  display: inline-flex; align-items: center; gap: 8px; padding: 9px 17px 9px 14px;
+  background: var(--ink); color: #fff; border-radius: 999px; white-space: nowrap;
 }
-.btn.ghost { background: transparent; color: var(--ink); }
-.btn.soon { background: transparent; color: var(--muted); border: 1px dashed var(--rule); cursor: default; }
-.btn.soon small { font-family: var(--mono); font-size: 0.68rem; letter-spacing: 0.06em; text-transform: uppercase; }
+.btn:hover { background: var(--acc); color: #fff; }
+.btn svg { width: 17px; height: 17px; flex: none; }
+.btn.soon { background: transparent; color: var(--muted); box-shadow: inset 0 0 0 1px var(--band-line); cursor: default; }
+.btn.soon:hover { background: transparent; color: var(--muted); }
+.btn.line { background: transparent; color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
+.btn.line:hover { background: var(--ink); color: #fff; }
 
-/* the two captions, one binding apart */
-.pair {
-  display: grid; grid-template-columns: 1fr auto 1fr; gap: 1rem; align-items: center;
-  border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); padding-block: 1.25rem;
+.tldr {
+  margin-top: -88px; position: relative;
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr);
+  background: var(--sheet); border-radius: 16px;
+  box-shadow: 0 0 0 1px var(--rule), 0 18px 40px -26px rgba(20, 22, 50, .35);
 }
-.pair p { font-family: var(--display); font-size: clamp(1rem, 2.4vw, 1.3rem); line-height: 1.35; }
-.pair .ne { font-family: var(--mono); font-size: 1.4rem; color: var(--muted); }
-.red   { color: #c8373b; } .black { background: var(--ink); color: var(--paper); padding: 0 0.25em; border-radius: 3px; }
-@media (max-width: 560px) { .pair { grid-template-columns: 1fr; text-align: left; } .pair .ne { display: none; } }
+.tldr-text { padding: 22px 24px; border-right: 1px solid var(--rule); font-size: 16.5px; line-height: 1.55; }
+.tldr .tag { font-family: var(--mono); font-size: 12px; letter-spacing: .06em; color: var(--acc); display: block; margin-bottom: 6px; }
+.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); font-family: var(--sans); }
+.stat { padding: 20px 16px; min-width: 0; }
+.stat + .stat { border-left: 1px solid var(--rule); }
+.stat b { display: block; font-size: 27px; font-weight: 700; color: var(--acc); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.stat span { display: block; font-size: 14px; font-weight: 600; margin-top: 4px; line-height: 1.3; }
+.stat small { display: block; font-family: var(--mono); font-size: 11.5px; color: var(--muted); margin-top: 2px; font-variant-numeric: tabular-nums; }
 
-.tldr { font-size: 1.3rem; line-height: 1.55; }
+/* ---------- sections ---------- */
+section { padding-top: 84px; }
+section h2 { font-weight: 700; letter-spacing: -0.02em; font-size: clamp(28px, 3.6vw, 40px); line-height: 1.1; margin: 0 0 18px; }
+section .read p + p { margin-top: 16px; }
+.lede { font-size: 21px; line-height: 1.55; }
+.card { background: var(--sheet); border-radius: 14px; box-shadow: 0 0 0 1px var(--rule); }
+.chip { display: inline-block; font-family: var(--sans); font-size: 13.5px; line-height: 1.5; padding: 2px 10px; border-radius: 7px; color: var(--ink); white-space: nowrap; }
+.chip.strike { text-decoration: line-through; text-decoration-color: var(--src); text-decoration-thickness: 2px; opacity: .75; }
+.note { font-family: var(--sans); font-size: 14.5px; color: var(--muted); margin-top: 16px; line-height: 1.55; }
 
-/* ---------- Figures ---------- */
-figure { margin: 0; display: flex; flex-direction: column; gap: 0.9rem; }
-figure .frame {
-  background: #fff; border: 1px solid var(--rule); border-radius: 10px; padding: clamp(0.75rem, 2vw, 1.5rem);
-  overflow-x: auto;
-}
-figure img { display: block; width: 100%; height: auto; min-width: 540px; }
-figcaption { font-size: 0.95rem; color: var(--muted); max-width: var(--read); }
-figcaption b { color: var(--ink); font-weight: 500; }
+/* problem: the caption pair */
+.pair { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 18px; align-items: center; padding-block: 20px; margin: 4px 0 22px; border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); }
+.pair p { font-family: var(--sans); font-size: clamp(17px, 2.4vw, 21px); line-height: 1.35; }
+.pair .ne { font-family: var(--mono); font-size: 24px; color: var(--muted); }
+.c-red { color: #c8373b; font-weight: 600; }
+.c-black { background: var(--ink); color: #fff; padding: 0 .25em; border-radius: 3px; }
 
-/* ---------- Steps ---------- */
-.steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 2rem; }
-.step { display: flex; flex-direction: column; gap: 0.5rem; border-top: 2px solid var(--ink); padding-top: 0.9rem; }
-.step .label { color: var(--ink); }
-.step p { font-size: 1rem; }
-@media (max-width: 760px) { .steps { grid-template-columns: 1fr; gap: 1.5rem; } }
+.symptoms { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-top: 30px; }
+.sym { padding: 20px 20px 16px; min-width: 0; display: flex; flex-direction: column; }
+.sym svg { width: 100%; height: 86px; display: block; margin-bottom: 12px; }
+.sym svg .d { fill: var(--base); }
+.sym svg .h { fill: var(--acc); }
+.sym svg .l { stroke: var(--base); stroke-width: 1.2; fill: none; }
+.sym svg .la { stroke: var(--acc); stroke-width: 1.6; fill: none; }
+.sym svg text { font-family: var(--sans); font-size: 11px; fill: var(--muted); }
+.sym h3 { font-size: 19px; font-weight: 600; line-height: 1.3; }
+.sym p { font-size: 15.5px; color: var(--muted); margin: 4px 0 12px; line-height: 1.5; }
+.fix { margin-top: auto; font-family: var(--sans); font-size: 13.5px; border-top: 1px solid var(--rule); padding-top: 10px; }
+.fix strong { color: var(--acc); font-variant-numeric: tabular-nums; }
 
-/* ---------- Demo ---------- */
-.demo {
-  background: var(--surface); border: 1px solid var(--rule); border-radius: 14px;
-  padding: clamp(1rem, 3vw, 2rem); display: grid; grid-template-columns: minmax(0, 15rem) minmax(0, 1fr); gap: 2rem;
-}
-@media (max-width: 760px) { .demo { grid-template-columns: 1fr; } }
-.ops { display: flex; flex-direction: column; gap: 0.6rem; }
+/* figures */
+figure { margin: 30px 0 0; }
+.plate { background: #fff; border-radius: 16px; padding: 22px; box-shadow: 0 0 0 1px var(--rule); overflow-x: auto; }
+.plate img { width: 100%; height: auto; min-width: 540px; }
+.plate a { display: block; cursor: zoom-in; }
+figcaption { font-family: var(--sans); font-size: 15px; color: var(--muted); line-height: 1.55; margin-top: 14px; max-width: 760px; }
+figcaption b { color: var(--ink); font-weight: 600; }
+
+/* method: dictionary + steps */
+.dict { padding: 18px 20px; margin-top: 18px; }
+.dict-head { font-family: var(--sans); font-size: 14px; color: var(--muted); display: flex; justify-content: space-between; flex-wrap: wrap; gap: 6px 16px; margin-bottom: 12px; }
+.dict-head b { color: var(--ink); font-weight: 600; }
+.dict-rows { display: grid; gap: 9px; }
+.dict-row { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 12px; align-items: center; }
+.dict-row > span { font-family: var(--mono); font-size: 11.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+.dict-row div { display: flex; flex-wrap: wrap; gap: 6px; }
+.dict-row .chip.on { box-shadow: 0 0 0 2px var(--acc); font-weight: 600; }
+.flow { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; margin-top: 18px; }
+.stepc { padding: 20px; min-width: 0; position: relative; display: flex; flex-direction: column; }
+.stepc + .stepc::before { content: "→"; position: absolute; left: -12px; top: 50%; transform: translate(-50%, -50%); font-family: var(--sans); font-size: 16px; color: var(--muted); }
+.stepc small { font-family: var(--mono); font-size: 12px; color: var(--acc); letter-spacing: .06em; }
+.stepc h3 { font-size: 20px; font-weight: 600; margin: 2px 0 8px; }
+.stepc p { font-size: 15.5px; color: var(--muted); line-height: 1.55; margin-bottom: 14px; }
+.stepc p i { color: var(--ink); }
+.stepc .ex { margin-top: auto; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-family: var(--sans); font-size: 13px; color: var(--muted); }
+
+/* demo */
+.demo { margin-top: 26px; padding: clamp(18px, 3vw, 30px); display: grid; grid-template-columns: minmax(0, 15rem) minmax(0, 1fr); gap: 30px; }
+.ops { display: flex; flex-direction: column; gap: 9px; }
 .op {
-  text-align: left; font: inherit; font-family: var(--display); font-size: 0.98rem;
-  padding: 0.75rem 0.9rem; border-radius: 8px; cursor: pointer;
-  background: transparent; color: var(--ink); border: 1px solid var(--rule);
-  display: flex; flex-direction: column; gap: 0.15rem;
+  text-align: left; font: inherit; font-family: var(--sans); font-size: 16px; font-weight: 600;
+  padding: 11px 14px; border-radius: 10px; cursor: pointer;
+  background: var(--soft); color: var(--ink); border: 1px solid var(--rule);
+  display: flex; flex-direction: column; gap: 2px; transition: border-color .2s, background .2s;
 }
-.op small { font-family: var(--mono); font-size: 0.72rem; color: var(--muted); }
+.op small { font-family: var(--mono); font-size: 11.5px; font-weight: 400; color: var(--muted); }
 .op:hover { border-color: var(--ink); }
-.op[aria-pressed="true"] { border-color: var(--target); background: var(--target-soft); }
-.bars { display: flex; flex-direction: column; gap: 0.55rem; min-width: 0; }
-.barrow { display: grid; grid-template-columns: 7.5rem minmax(0, 1fr) 3.2rem; gap: 0.75rem; align-items: center; font-family: var(--mono); font-size: 0.82rem; }
-.barrow .name { display: flex; align-items: center; gap: 0.45rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: color 0.3s; }
-.barrow .dot { width: 0.6rem; height: 0.6rem; border-radius: 2px; flex: none; }
-.track { height: 0.9rem; background: var(--paper); border-radius: 3px; overflow: hidden; }
-.fill { height: 100%; border-radius: 3px; transition: width 0.55s cubic-bezier(.2,.7,.2,1), background-color 0.3s; }
+.op[aria-pressed="true"] { border-color: var(--acc); background: var(--acc-tint); }
+.bars { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.barrow { display: grid; grid-template-columns: 8.5rem minmax(0, 1fr) 3.2rem; gap: 12px; align-items: center; font-family: var(--mono); font-size: 13px; }
+.barrow .name { display: flex; align-items: center; gap: 7px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: color .3s; }
+.barrow .dot { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+.track { height: 15px; background: var(--soft); border-radius: 4px; overflow: hidden; }
+.fill { height: 100%; border-radius: 4px; transition: width .55s cubic-bezier(.2,.7,.2,1), background-color .3s; }
 .val { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
-.barrow.changed-out .name { color: var(--source); text-decoration: line-through; }
-.barrow.changed-in .name { color: var(--target); font-weight: 600; }
-.legend { display: flex; flex-wrap: wrap; gap: 1rem; font-family: var(--mono); font-size: 0.72rem; color: var(--muted); margin-top: 0.4rem; }
-.legend span { display: inline-flex; align-items: center; gap: 0.35rem; }
-.readout { font-size: 1rem; min-height: 3.2em; border-left: 2px solid var(--target); padding-left: 0.9rem; }
-@media (max-width: 420px) { .barrow { grid-template-columns: 6rem minmax(0,1fr) 2.8rem; } }
+.barrow.changed-out .name { color: var(--src); text-decoration: line-through; }
+.barrow.changed-in .name { color: var(--acc); font-weight: 600; }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 18px; font-family: var(--sans); font-size: 13.5px; color: var(--muted); margin-top: 4px; }
+.legend span { display: inline-flex; align-items: center; gap: 7px; }
+.legend i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.readout { font-size: 16.5px; min-height: 3.2em; border-left: 3px solid var(--acc); padding-left: 14px; margin-top: 10px; }
 
-/* ---------- Findings ---------- */
-.findings { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2.25rem 2.5rem; }
-@media (max-width: 680px) { .findings { grid-template-columns: 1fr; } }
-.finding { display: flex; flex-direction: column; gap: 0.55rem; }
-.delta { font-family: var(--mono); font-size: 0.95rem; display: flex; align-items: baseline; gap: 0.5rem; flex-wrap: wrap; font-variant-numeric: tabular-nums; }
-.delta .from { color: var(--muted); }
-.delta .to { color: var(--target); font-weight: 600; font-size: 1.35rem; }
-.finding p { font-size: 1rem; }
-.note { font-size: 0.9rem; color: var(--muted); }
+/* retrieval callouts */
+.callouts { list-style: none; margin: 22px 0 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; counter-reset: c; }
+.callouts li { padding: 18px 18px 16px 58px; position: relative; font-size: 15.5px; line-height: 1.55; color: var(--muted); min-width: 0; }
+.callouts li b { display: block; color: var(--ink); font-family: var(--sans); font-weight: 600; font-size: 17px; margin-bottom: 4px; }
+.callouts li::before { counter-increment: c; content: counter(c); position: absolute; left: 18px; top: 18px; width: 26px; height: 26px; border-radius: 50%; background: var(--acc); color: #fff; font-family: var(--sans); font-size: 13.5px; font-weight: 700; display: grid; place-items: center; }
 
-/* ---------- BibTeX ---------- */
-.bib { position: relative; background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; }
-.bib pre { margin: 0; padding: 1.25rem 1.25rem; overflow-x: auto; font-family: var(--mono); font-size: 0.82rem; line-height: 1.6; }
-.copy {
-  position: absolute; top: 0.6rem; right: 0.6rem; font-family: var(--mono); font-size: 0.72rem;
-  padding: 0.35rem 0.6rem; border-radius: 6px; border: 1px solid var(--rule); background: var(--paper); color: var(--ink); cursor: pointer;
+/* results dumbbells */
+.fair { font-family: var(--sans); font-size: 14.5px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 18px 0 8px; }
+.fair span { padding: 3px 11px; border-radius: 999px; background: var(--soft); box-shadow: inset 0 0 0 1px var(--rule); color: var(--ink); font-size: 13.5px; }
+.dgroup { margin-top: 22px; }
+.dgroup h3 { font-family: var(--mono); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 500; margin-bottom: 6px; }
+.db { display: grid; grid-template-columns: 210px minmax(0, 1fr) 84px; gap: 16px; align-items: center; padding: 12px 0 8px; border-top: 1px solid var(--rule); font-family: var(--sans); }
+.db .lab { font-size: 16px; line-height: 1.3; }
+.db .lab small { display: block; color: var(--muted); font-size: 13px; }
+.db .line { position: relative; height: 34px; }
+.db .line::before { content: ""; position: absolute; left: 0; right: 0; top: 66%; height: 1px; background: var(--rule); }
+.db .seg { position: absolute; top: calc(66% - 2px); height: 4px; background: var(--acc-tint); border-radius: 2px; }
+.db .dot { position: absolute; top: 66%; border-radius: 50%; transform: translate(-50%, -50%); }
+.db .dot.b { width: 12px; height: 12px; background: var(--base); }
+.db .dot.g { width: 15px; height: 15px; background: var(--acc); }
+.db .lbl { position: absolute; top: 0; font-size: 12px; color: var(--muted); transform: translateX(-50%); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.db .lbl.g { color: var(--acc); font-weight: 600; }
+.db .delta { text-align: right; font-weight: 700; font-size: 17px; color: var(--acc); font-variant-numeric: tabular-nums; }
+.db .delta small { display: block; font-weight: 400; font-size: 12px; color: var(--muted); }
+.dlegend { display: flex; flex-wrap: wrap; gap: 8px 20px; font-family: var(--sans); font-size: 14px; color: var(--muted); margin-top: 16px; }
+.dlegend span { display: inline-flex; gap: 8px; align-items: center; }
+.dlegend em { width: 12px; height: 12px; border-radius: 50%; }
+
+/* what LACE doesn't need */
+.notneed { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-top: 8px; }
+.nn { padding: 20px; min-width: 0; }
+.nn .x { font-family: var(--sans); font-size: 23px; font-weight: 700; color: var(--muted); text-decoration: line-through; text-decoration-color: var(--src); text-decoration-thickness: 3px; line-height: 1.2; }
+.nn p { font-size: 15.5px; color: var(--muted); margin-top: 8px; line-height: 1.5; }
+.ships { margin-top: 14px; padding: 18px 22px; background: var(--acc-tint); border-radius: 14px; font-family: var(--sans); display: flex; flex-wrap: wrap; gap: 4px 18px; align-items: baseline; }
+.ships b { font-size: 19px; color: var(--acc); }
+.ships span { font-size: 15.5px; }
+
+/* cite */
+.bib { position: relative; }
+.bib pre { font-family: var(--mono); font-size: 13.5px; line-height: 1.65; background: var(--sheet); border-radius: 14px; box-shadow: 0 0 0 1px var(--rule); padding: 22px 24px; margin: 0; overflow-x: auto; }
+.copy { position: absolute; top: 12px; right: 12px; font-family: var(--sans); font-size: 14px; font-weight: 600; background: var(--soft); color: var(--ink); border: 1px solid var(--rule); border-radius: 8px; padding: 6px 14px; cursor: pointer; }
+.copy:hover { border-color: var(--ink); }
+
+/* footer */
+footer { padding-top: 90px; padding-bottom: 56px; }
+.foot { display: grid; grid-template-columns: minmax(0, 1.3fr) repeat(2, minmax(0, 1fr)); gap: 24px; font-family: var(--sans); font-size: 14.5px; color: var(--muted); border-top: 1px solid var(--rule); padding-top: 26px; line-height: 1.6; }
+.foot b { color: var(--ink); display: block; margin-bottom: 4px; font-size: 15px; }
+.foot .wm { font-weight: 800; font-size: 30px; letter-spacing: -0.015em; color: var(--ink); line-height: 1; }
+.foot .wm span { color: var(--acc); }
+.foot p { margin-top: 8px; }
+.foot code { font-family: var(--mono); font-size: 13px; color: var(--ink); user-select: all; word-break: break-all; }
+.sibling { display: inline-flex; gap: 8px; align-items: center; margin-top: 12px; text-decoration: none; font-size: 13.5px; padding: 5px 12px; border-radius: 999px; box-shadow: inset 0 0 0 1px var(--rule); background: var(--soft); color: var(--ink); }
+.sibling i { width: 8px; height: 8px; border-radius: 50%; background: #2f7d5c; }
+
+@media (max-width: 860px) {
+  .tldr { grid-template-columns: 1fr; }
+  .tldr-text { border-right: 0; border-bottom: 1px solid var(--rule); }
+  .symptoms, .flow, .callouts, .notneed { grid-template-columns: 1fr; }
+  .stepc + .stepc::before { content: "↓"; left: 50%; top: -12px; }
+  .demo { grid-template-columns: 1fr; }
+  .foot { grid-template-columns: 1fr; }
 }
-
-footer { border-top: 1px solid var(--rule); padding-block: 2rem 3rem; }
-footer .col { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 1rem; font-size: 0.9rem; color: var(--muted); }
-footer code { font-family: var(--mono); font-size: 0.85rem; color: var(--ink); user-select: all; }
-
-@media (prefers-reduced-motion: reduce) { .fill, .barrow .name { transition: none; } }
+@media (max-width: 560px) {
+  body { font-size: 17px; }
+  .wide { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .hero-inner { padding-top: 32px; padding-bottom: 116px; }
+  .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .stat:nth-child(3) { border-left: 0; }
+  .stat:nth-child(n+3) { border-top: 1px solid var(--rule); }
+  .btn { font-size: 14px; padding: 8px 14px 8px 12px; }
+  .pair { grid-template-columns: 1fr; }
+  .pair .ne { display: none; }
+  .plate { padding: 10px; border-radius: 12px; }
+  .dict-row { grid-template-columns: 1fr; gap: 4px; }
+  .barrow { grid-template-columns: 6.5rem minmax(0, 1fr) 2.8rem; }
+  .db { grid-template-columns: minmax(0, 1fr) 72px; }
+  .db .lab { grid-column: 1 / -1; }
+  .lede { font-size: 19px; }
+}
+@media (prefers-reduced-motion: reduce) { .fill, .barrow .name, .op { transition: none; } }
 </style>
 </head>
 <body>
 
-<main>
-  <!-- HERO -->
-  <header class="col hero">
-    <div class="venue">
-      <span class="pill">NeurIPS 2026</span>
-      <span class="label">Vision–language · Compositionality</span>
+<header>
+  <div class="hero-band">
+    <canvas id="heroCanvas" aria-hidden="true"></canvas>
+    <div class="wide hero-inner">
+      <div class="hero-top"><span><i></i>NeurIPS 2026 · Poster</span><span>IIT Hyderabad</span></div>
+      <h1 class="mark">LACE<span>.</span></h1>
+      <div class="expand" aria-label="Latent Alignment via Counterfactual Embeddings">
+        <span style="background:var(--a-obj)"><b>L</b>atent</span>
+        <span style="background:var(--a-att)"><b>A</b>lignment via</span>
+        <span style="background:var(--a-rel)"><b>C</b>ounterfactual</span>
+        <span style="background:var(--a-ctx)"><b>E</b>mbeddings</span>
+      </div>
+      <p class="tagline">Edit the embedding, not the pixels: <i>counterfactual negatives for both image and text</i></p>
+      <div class="authors"><span>Harsh Udai</span><span>Konda Reddy Mopuri</span></div>
+      <div class="affil">Department of Artificial Intelligence, IIT Hyderabad</div>
+      <nav class="links" aria-label="Paper links">
+        <!-- When the paper link exists: set href, remove class "soon" and aria-disabled -->
+        <a class="btn soon" href="#" aria-disabled="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8z"/><path d="M14 3v5h5M9 13h6M9 17h6"/></svg>Paper (soon)</a>
+        <a class="btn" href="https://github.com/Harsh-Udai/LACE"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.65.5.5 5.65.5 12a11.5 11.5 0 0 0 7.86 10.92c.58.1.79-.25.79-.56v-2c-3.2.7-3.87-1.37-3.87-1.37-.53-1.33-1.28-1.69-1.28-1.69-1.05-.71.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.77 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.42-2.7 5.39-5.26 5.68.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5z"/></svg>Code</a>
+        <a class="btn line" href="#bibtex"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 7l-4 5 4 5M16 7l4 5-4 5"/></svg>BibTeX</a>
+      </nav>
     </div>
-    <h1 class="wordmark">LACE
-      <span class="sub">Latent Alignment via Counterfactual Embeddings</span>
-    </h1>
-    <div class="authors">
-      <div><b>Harsh Udai</b> &nbsp;·&nbsp; <b>Konda Reddy Mopuri</b></div>
-      <span>Department of Artificial Intelligence, IIT Hyderabad</span>
+  </div>
+  <div class="wide">
+    <div class="tldr">
+      <p class="tldr-text"><span class="tag">TL;DR</span>Text-only hard negatives leave the image encoder without near-misses. LACE swaps, removes or transplants concepts directly in the embedding to make counterfactual negatives on both sides. No diffusion, no image editor.</p>
+      <div class="stats">
+        <div class="stat"><b>+5.94</b><span>MMVP-VLM</span><small>29.62 → 35.56</small></div>
+        <div class="stat"><b>+3.49</b><span>COLA</span><small>35.56 → 39.05</small></div>
+        <div class="stat"><b>−3.05</b><span>attribute-swap failures</span><small>4.65% → 1.60%</small></div>
+        <div class="stat"><b>+4.84</b><span>mutual reciprocity</span><small>46.57% → 51.41%</small></div>
+      </div>
     </div>
-    <div class="actions">
-      <span class="btn soon" aria-disabled="true">Paper <small>soon</small></span>
-      <span class="btn soon" aria-disabled="true">Code <small>soon</small></span>
-      <a class="btn" href="#bibtex">BibTeX</a>
-    </div>
-  </header>
+  </div>
+</header>
 
-  <!-- THE PROBLEM, IN ONE LINE -->
-  <section class="col stack" aria-labelledby="problem">
-    <span class="label" id="problem">The problem</span>
-    <div class="pair">
-      <p>a <span class="red">red</span> suitcase next to a <span class="black">black</span> backpack</p>
-      <span class="ne" aria-hidden="true">≠</span>
-      <p>a <span class="black">black</span> suitcase next to a <span class="red">red</span> backpack</p>
+<main class="wide">
+
+  <!-- THE PROBLEM -->
+  <section aria-labelledby="problem">
+    <div class="read">
+      <span class="label">The problem</span>
+      <h2 id="problem">Same objects, same colours, different scene</h2>
+      <div class="pair">
+        <p>a <span class="c-red">red</span> suitcase next to a <span class="c-black">black</span> backpack</p>
+        <span class="ne" aria-hidden="true">≠</span>
+        <p>a <span class="c-black">black</span> suitcase next to a <span class="c-red">red</span> backpack</p>
+      </div>
+      <p class="lede">CLIP-style models often score these two captions almost the same, because their training never forces them to bind each attribute to the right object.</p>
+      <p>The common fix adds hard negatives on the text side only: swapped, negated, or perturbed captions. The text encoder learns the fine distinctions, but the image encoder never sees a matching near-miss. The shared embedding space becomes lopsided, even when retrieval scores look healthy.</p>
     </div>
-    <p class="tldr">Same objects, same colors, different scene. CLIP-style models often score these two captions almost the same, because their training never forces them to bind each attribute to the right object.</p>
-    <p>The common fix adds hard negatives on the text side only: swapped, negated, or perturbed captions. The text encoder learns the fine distinctions, but the image encoder never sees a matching near-miss. The shared embedding space becomes lopsided. A few points turn into hubs that crowd out correct matches, neighbors stop agreeing in both directions, and small edits cause brittle failures, even when retrieval scores look healthy.</p>
+    <div class="symptoms">
+      <div class="sym card">
+        <svg viewBox="0 0 200 86" aria-hidden="true">
+          <path class="l" d="M100 43 L30 15 M100 43 L22 60 M100 43 L60 78 M100 43 L150 12 M100 43 L178 50 M100 43 L140 80 M100 43 L90 6"/>
+          <circle class="d" cx="30" cy="15" r="4"/><circle class="d" cx="22" cy="60" r="4"/><circle class="d" cx="60" cy="78" r="4"/><circle class="d" cx="150" cy="12" r="4"/><circle class="d" cx="178" cy="50" r="4"/><circle class="d" cx="140" cy="80" r="4"/><circle class="d" cx="90" cy="6" r="4"/>
+          <circle class="h" cx="100" cy="43" r="8"/>
+        </svg>
+        <h3>Hubs</h3>
+        <p>A few points become the nearest neighbour of almost everything and crowd out correct matches.</p>
+        <div class="fix">With LACE: hubness falls</div>
+      </div>
+      <div class="sym card">
+        <svg viewBox="0 0 200 86" aria-hidden="true">
+          <circle class="d" cx="40" cy="25" r="6"/><text x="24" y="48">image</text>
+          <circle class="d" cx="160" cy="25" r="6"/><text x="150" y="48">text</text>
+          <circle class="d" cx="160" cy="70" r="6"/><text x="128" y="86">another image</text>
+          <path class="la" d="M48 25 H150"/>
+          <path class="l" d="M152 25 C120 40, 80 60, 48 66" style="stroke-dasharray:4 4"/>
+          <circle class="d" cx="40" cy="68" r="6"/>
+        </svg>
+        <h3>One-way neighbours</h3>
+        <p>An image's nearest caption often has a different image as its own nearest match.</p>
+        <div class="fix">Mutual reciprocity <strong>46.57% → 51.41%</strong></div>
+      </div>
+      <div class="sym card">
+        <svg viewBox="0 0 200 86" aria-hidden="true">
+          <rect x="6" y="14" width="88" height="26" rx="6" style="fill:var(--a-att)"/><text x="18" y="31" style="fill:var(--ink)">red ↔ black</text>
+          <rect x="106" y="14" width="88" height="26" rx="6" style="fill:var(--a-rel)"/><text x="120" y="31" style="fill:var(--ink)">left ↔ right</text>
+          <text x="6" y="64">edited caption still wins</text>
+          <path d="M6 74 H194" style="stroke:var(--src);stroke-width:2;stroke-dasharray:2 3"/>
+        </svg>
+        <h3>Brittle to small edits</h3>
+        <p>Swapping an attribute or relation can leave the edited caption scoring above the true one.</p>
+        <div class="fix">Attribute swaps <strong>4.65% → 1.60%</strong> · relation swaps <strong>3.27% → 1.10%</strong></div>
+      </div>
+    </div>
   </section>
 
   <!-- METHOD -->
-  <section class="wide stack" aria-labelledby="method" style="gap:2rem">
-    <div class="col stack" style="margin:0 auto">
+  <section aria-labelledby="method">
+    <div class="read">
       <span class="label">Method</span>
       <h2 id="method">Hard negatives for both modalities, made in embedding space</h2>
       <p>LACE edits embeddings instead of pixels. It needs no diffusion model, no image editor, and no retrieval mining, so image-side counterfactuals become as cheap as text-side ones.</p>
     </div>
     <figure>
-      <div class="frame"><img src="assets/method.png" alt="Diagram: a concept set of attributes, objects and relations passes through the CLIP text encoder to form a concept dictionary D; multiplied by sparse weights alpha, it reconstructs a counterfactual embedding z_cf." width="1581" height="644"></div>
+      <div class="plate"><a href="assets/method.png" aria-label="Open full-size method figure"><img src="assets/method.png" alt="Diagram: a concept set of attributes, objects and relations passes through the CLIP text encoder to form a concept dictionary D; multiplied by sparse weights alpha, it reconstructs a counterfactual embedding z_cf." width="1581" height="644"></a></div>
       <figcaption><b>A shared concept dictionary.</b> Object, attribute, and relation concepts are embedded once to form a fixed dictionary D. Any image or text embedding is then explained by a sparse weight vector α over these atoms, and editing that explanation yields a counterfactual embedding.</figcaption>
     </figure>
-    <div class="steps">
-      <div class="step">
-        <span class="label">Step 1 · Decompose</span>
+
+    <div class="dict card">
+      <div class="dict-head"><span><b>Concept dictionary D</b> · embedded once with the CLIP text encoder</span><span>ringed = active in a photo of sheep in a field</span></div>
+      <div class="dict-rows">
+        <div class="dict-row"><span>objects</span><div>
+          <span class="chip on" style="background:var(--a-obj)">sheep</span><span class="chip on" style="background:var(--a-obj)">grass</span><span class="chip on" style="background:var(--a-obj)">field</span><span class="chip" style="background:var(--a-obj)">zebra</span><span class="chip" style="background:var(--a-obj)">suitcase</span><span class="chip" style="background:var(--a-obj)">backpack</span><span class="chip" style="background:var(--a-obj)">donut</span><span class="chip" style="background:var(--a-obj)">broccoli</span><span class="chip" style="background:var(--a-obj)">…</span></div></div>
+        <div class="dict-row"><span>attributes</span><div>
+          <span class="chip on" style="background:var(--a-att)">white</span><span class="chip on" style="background:var(--a-att)">fluffy</span><span class="chip" style="background:var(--a-att)">black</span><span class="chip" style="background:var(--a-att)">red</span><span class="chip" style="background:var(--a-att)">blue</span><span class="chip" style="background:var(--a-att)">…</span></div></div>
+        <div class="dict-row"><span>relations</span><div>
+          <span class="chip on" style="background:var(--a-rel)">standing on</span><span class="chip" style="background:var(--a-rel)">next to</span><span class="chip" style="background:var(--a-rel)">on top of</span><span class="chip" style="background:var(--a-rel)">left of</span><span class="chip" style="background:var(--a-rel)">…</span></div></div>
+      </div>
+    </div>
+
+    <div class="flow">
+      <div class="stepc card">
+        <small>STEP 1 · DECOMPOSE</small>
         <h3>Find the concepts in play</h3>
         <p>Sparse coding writes each embedding as a few active atoms, such as <i>sheep</i>, <i>grass</i>, <i>white</i>, <i>on</i>. Only atoms that are both strongly used and semantically aligned are allowed to be edited.</p>
+        <div class="ex"><span class="chip" style="background:var(--a-obj)">sheep .42</span><span class="chip" style="background:var(--a-obj)">grass .24</span><span class="chip" style="background:var(--a-att)">white .16</span></div>
       </div>
-      <div class="step">
-        <span class="label">Step 2 · Edit</span>
+      <div class="stepc card">
+        <small>STEP 2 · EDIT</small>
         <h3>Change one thing</h3>
         <p>Attenuate, swap, or transplant a single concept with another of the same type: <em class="s">sheep</em> → <em class="t">zebra</em>, <em class="s">red</em> → <em class="t">blue</em>. The rest of the scene stays as it was.</p>
+        <div class="ex"><span class="chip strike" style="background:var(--a-obj)">sheep</span>→<span class="chip" style="background:var(--a-obj);box-shadow:0 0 0 2px var(--acc)">zebra</span></div>
       </div>
-      <div class="step">
-        <span class="label">Step 3 · Contrast</span>
+      <div class="stepc card">
+        <small>STEP 3 · CONTRAST</small>
         <h3>Train both sides</h3>
         <p>Edited captions become negatives for image→text retrieval, and edited images become negatives for text→image retrieval. At test time all of this is gone: it is a plain dual encoder.</p>
+        <div class="ex"><span class="chip" style="background:var(--acc-tint);color:var(--acc)">image → text</span><span class="chip" style="background:var(--acc-tint);color:var(--acc)">text → image</span></div>
       </div>
     </div>
   </section>
 
   <!-- INTERACTIVE -->
-  <section class="wide stack" aria-labelledby="try" style="gap:1.75rem">
-    <div class="col stack" style="margin:0 auto">
+  <section aria-labelledby="try">
+    <div class="read">
       <span class="label">Try the operator</span>
       <h2 id="try">Three ways to make a near-miss</h2>
       <p>The bars show the active atoms of an image embedding for a photo of sheep in a field. Pick an edit to see how LACE changes the sparse code before rebuilding the embedding. Values are illustrative.</p>
     </div>
-    <div class="demo">
+    <div class="demo card">
       <div class="ops" role="group" aria-label="Edit operator">
-        <button class="op" id="op-orig" data-op="orig" aria-pressed="true">Original<small>α for z = image embedding</small></button>
-        <button class="op" id="op-att" data-op="att" aria-pressed="false">Attenuate<small>weaken “sheep”</small></button>
-        <button class="op" id="op-swap" data-op="swap" aria-pressed="false">Swap<small>move “white” → “black”</small></button>
-        <button class="op" id="op-trans" data-op="trans" aria-pressed="false">Transplant<small>replace “sheep” with “zebra”</small></button>
+        <button class="op" type="button" data-op="orig" aria-pressed="true">Original<small>α for z = image embedding</small></button>
+        <button class="op" type="button" data-op="att" aria-pressed="false">Attenuate<small>weaken “sheep”</small></button>
+        <button class="op" type="button" data-op="swap" aria-pressed="false">Swap<small>move “white” → “black”</small></button>
+        <button class="op" type="button" data-op="trans" aria-pressed="false">Transplant<small>replace “sheep” with “zebra”</small></button>
       </div>
-      <div class="stack" style="gap:1rem; min-width:0">
+      <div style="min-width:0">
         <div class="bars" id="bars" aria-live="polite"></div>
         <div class="legend">
-          <span><i class="dot" style="background:var(--obj);width:.6rem;height:.6rem;border-radius:2px;display:inline-block"></i>object</span>
-          <span><i class="dot" style="background:var(--attr);width:.6rem;height:.6rem;border-radius:2px;display:inline-block"></i>attribute</span>
-          <span><i class="dot" style="background:var(--rel);width:.6rem;height:.6rem;border-radius:2px;display:inline-block"></i>relation</span>
+          <span><i style="background:var(--f-obj)"></i>object</span>
+          <span><i style="background:var(--f-att)"></i>attribute</span>
+          <span><i style="background:var(--f-rel)"></i>relation</span>
+          <span><i style="background:var(--src)"></i>edited away</span>
+          <span><i style="background:var(--acc)"></i>edited in</span>
         </div>
         <p class="readout" id="readout"></p>
       </div>
@@ -263,54 +438,56 @@ footer code { font-family: var(--mono); font-size: 0.85rem; color: var(--ink); u
   </section>
 
   <!-- QUALITATIVE -->
-  <section class="wide stack" aria-labelledby="qual" style="gap:2rem">
-    <div class="col stack" style="margin:0 auto">
+  <section aria-labelledby="qual">
+    <div class="read">
       <span class="label">Do the edits mean anything?</span>
       <h2 id="qual">Edited embeddings retrieve the new concept</h2>
-      <p>We transplant a concept inside a real COCO image embedding and look up its nearest real images. Before the edit, neighbors show the <em class="s">source</em> concept. After it, they show the <em class="t">target</em>, and the surrounding context (grass, plates, tables) stays. A random edit of the same size never retrieves the target.</p>
+      <p>We transplant a concept inside a real COCO image embedding and look up its nearest real images.</p>
     </div>
     <figure>
-      <div class="frame"><img src="assets/transplant.png" alt="Top-3 nearest COCO images before and after latent transplants. Sheep to zebra: three sheep photos become one sheep and two zebras. Donut to broccoli: three donut photos become three broccoli photos." width="1669" height="626" loading="lazy"></div>
+      <div class="plate"><a href="assets/transplant.png" aria-label="Open full-size transplant figure"><img src="assets/transplant.png" alt="Top-3 nearest COCO images before and after latent transplants. Sheep to zebra: three sheep photos become one sheep and two zebras. Donut to broccoli: three donut photos become three broccoli photos." width="1669" height="626" loading="lazy"></a></div>
       <figcaption><b>Latent transplants on COCO.</b> T marks target evidence, S source evidence, and C preserved context. Counts below each row are over the full top-10 neighborhood.</figcaption>
     </figure>
+    <ol class="callouts">
+      <li class="card"><b>Before the edit</b>Neighbours show the <em class="s">source</em> concept: sheep in one row, donuts in the other.</li>
+      <li class="card"><b>After a transplant</b>Neighbours switch to the <em class="t">target</em>. Sheep → zebra brings in two zebras; donut → broccoli turns all three into broccoli. Grass, plates and tables stay.</li>
+      <li class="card"><b>A random edit of the same size</b>Never retrieves the target. The direction of the edit carries the meaning, not its size.</li>
+    </ol>
   </section>
 
-  <!-- FINDINGS -->
-  <section class="col stack" aria-labelledby="results" style="gap:2rem">
-    <div class="stack">
+  <!-- RESULTS -->
+  <section aria-labelledby="results">
+    <div class="read">
       <span class="label">Results</span>
       <h2 id="results">What the counterfactuals add</h2>
-      <p>Every comparison below holds everything fixed (backbone, data, LoRA setup, optimizer, schedule) and changes only whether LACE's counterfactuals are used.</p>
+      <p>Every comparison below changes only whether LACE's counterfactuals are used.</p>
     </div>
-    <div class="findings">
-      <div class="finding">
-        <h3>Multi-object binding</h3>
-        <div class="delta"><span class="from">35.56</span>→<span class="to">39.05</span><span class="label">COLA</span></div>
-        <p>Better at telling scenes apart when the same objects and attributes are bound differently.</p>
-      </div>
-      <div class="finding">
-        <h3>Fine visual detail</h3>
-        <div class="delta"><span class="from">29.62</span>→<span class="to">35.56</span><span class="label">MMVP-VLM</span></div>
-        <p>Image-side negatives sharpen the vision encoder on color, viewpoint, and state.</p>
-      </div>
-      <div class="finding">
-        <h3>Fewer brittle failures</h3>
-        <div class="delta"><span class="from">3.27%</span>→<span class="to">1.10%</span><span class="label">relation swaps</span></div>
-        <p>About three times fewer cases where an edited caption still wins over the true one. Attribute swaps drop from 4.65% to 1.60%.</p>
-      </div>
-      <div class="finding">
-        <h3>Beyond CLIP's loss</h3>
-        <div class="delta"><span class="from">45.83</span>→<span class="to">49.46</span><span class="label">SigLIP avg.</span></div>
-        <p>The same generator works with SigLIP's pairwise sigmoid objective, improving every benchmark we report.</p>
-      </div>
-    </div>
-    <p class="note">The shared space also gets healthier: mutual reciprocity rises from 46.57% to 51.41% and hubness falls. The paper has full benchmark results, comparisons with prior compositional methods, and ablations.</p>
+    <div class="fair">Held fixed: <span>backbone</span><span>data</span><span>LoRA setup</span><span>optimizer</span><span>schedule</span></div>
+    <div id="dumbbells"></div>
+    <div class="dlegend"><span><em style="background:var(--base)"></em>Without LACE</span><span><em style="background:var(--acc)"></em>With LACE</span><span>Rows in a group share one scale. Failure rates are flipped so better is always to the right.</span></div>
+    <p class="note">The paper has full benchmark results, comparisons with prior compositional methods, and ablations.</p>
   </section>
 
-  <!-- BIBTEX -->
-  <section class="col stack" aria-labelledby="bibtex">
-    <span class="label">Cite</span>
-    <h2 id="bibtex">BibTeX</h2>
+  <!-- PRACTICAL -->
+  <section aria-labelledby="practical">
+    <div class="read">
+      <span class="label">Why it's practical</span>
+      <h2 id="practical">What LACE doesn't need</h2>
+    </div>
+    <div class="notneed">
+      <div class="nn card"><div class="x">Diffusion model</div><p>No generated images. Counterfactuals are made in embedding space.</p></div>
+      <div class="nn card"><div class="x">Image editor</div><p>No inpainting or pixel edits to make image-side negatives.</p></div>
+      <div class="nn card"><div class="x">Retrieval mining</div><p>No search over a corpus for near-miss pairs.</p></div>
+    </div>
+    <div class="ships"><b>At test time, it is a plain dual encoder.</b><span>The same generator works with CLIP's contrastive loss and SigLIP's pairwise sigmoid loss.</span></div>
+  </section>
+
+  <!-- CITE -->
+  <section aria-labelledby="bibtex">
+    <div class="read">
+      <span class="label">Cite</span>
+      <h2 id="bibtex">BibTeX</h2>
+    </div>
     <div class="bib">
       <button class="copy" id="copy-bib" type="button">Copy</button>
 <pre id="bibtext">@inproceedings{udai2026lace,
@@ -321,18 +498,68 @@ footer code { font-family: var(--mono); font-size: 0.85rem; color: var(--ink); u
 }</pre>
     </div>
   </section>
+
 </main>
 
-<footer>
-  <div class="col">
-    <span>LACE · NeurIPS 2026 · IIT Hyderabad</span>
-    <span>Contact: <code>ai23resch11003@iith.ac.in</code></span>
+<footer class="wide">
+  <div class="foot">
+    <div>
+      <div class="wm">LACE<span>.</span></div>
+      <p>Latent Alignment via Counterfactual Embeddings · NeurIPS 2026</p>
+      <a class="sibling" href="https://harsh-udai.github.io/GPS-CLIP/"><i></i>Also at NeurIPS 2026: GPS-CLIP</a>
+    </div>
+    <div><b>Links</b>Paper (soon)<br><a href="https://github.com/Harsh-Udai/LACE">Code on GitHub</a> · <a href="#bibtex">BibTeX</a></div>
+    <div><b>Contact</b><code>ai23resch11003@iith.ac.in</code><br>Department of AI, IIT Hyderabad</div>
   </div>
 </footer>
 
 <script>
 (function () {
-  var C = { o: "var(--obj)", a: "var(--attr)", r: "var(--rel)" };
+  var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  /* ---------- header: drifting concept graph ---------- */
+  (function () {
+    var cv = document.getElementById("heroCanvas"), ctx = cv.getContext("2d");
+    var W = 0, H = 0, nodes = [], C = getComputedStyle(document.documentElement).getPropertyValue("--dot").trim() || "61,66,194";
+    function mask(x) { return Math.min(1, Math.max(0.1, (Math.abs(x / W - 0.5) - 0.17) * 3)); }
+    function size() {
+      var r = cv.getBoundingClientRect(), d = window.devicePixelRatio || 1;
+      W = r.width; H = r.height; cv.width = W * d; cv.height = H * d; ctx.setTransform(d, 0, 0, d, 0, 0);
+      nodes = [];
+      var n = Math.round(W / 34);
+      for (var i = 0; i < n; i++) nodes.push({ x: Math.random() * W, y: Math.random() * H, vx: (Math.random() - .5) * .35, vy: (Math.random() - .5) * .35, r: 2 + Math.random() * 2.5 });
+    }
+    function frame() {
+      ctx.clearRect(0, 0, W, H);
+      for (var gx = 10; gx < W; gx += 34) for (var gy = 10; gy < H; gy += 34) {
+        ctx.fillStyle = "rgba(" + C + "," + (0.09 * mask(gx)) + ")";
+        ctx.beginPath(); ctx.arc(gx, gy, 1.8, 0, 6.283); ctx.fill();
+      }
+      if (!reduce) nodes.forEach(function (n) {
+        n.x += n.vx; n.y += n.vy;
+        if (n.x < 0 || n.x > W) n.vx *= -1;
+        if (n.y < 0 || n.y > H) n.vy *= -1;
+      });
+      for (var i = 0; i < nodes.length; i++) for (var j = i + 1; j < nodes.length; j++) {
+        var a = nodes[i], b = nodes[j], dx = a.x - b.x, dy = a.y - b.y, dd = Math.sqrt(dx * dx + dy * dy);
+        if (dd < 130) {
+          ctx.strokeStyle = "rgba(" + C + "," + (0.22 * (1 - dd / 130) * Math.min(mask(a.x), mask(b.x))) + ")";
+          ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+        }
+      }
+      nodes.forEach(function (n) {
+        ctx.fillStyle = "rgba(" + C + "," + (0.45 * mask(n.x)) + ")";
+        ctx.beginPath(); ctx.arc(n.x, n.y, n.r, 0, 6.283); ctx.fill();
+      });
+      if (!reduce && !document.hidden) requestAnimationFrame(frame);
+    }
+    document.addEventListener("visibilitychange", function () { if (!document.hidden && !reduce) requestAnimationFrame(frame); });
+    window.addEventListener("resize", function () { size(); if (reduce) frame(); });
+    size(); frame();
+  })();
+
+  /* ---------- operator demo (values are illustrative) ---------- */
+  var COL = { o: "var(--f-obj)", a: "var(--f-att)", r: "var(--f-rel)" };
   var base = [
     { k: "sheep", t: "o", v: 0.42 },
     { k: "grass", t: "o", v: 0.24 },
@@ -342,70 +569,77 @@ footer code { font-family: var(--mono); font-size: 0.85rem; color: var(--ink); u
     { k: "fluffy", t: "a", v: 0.05 }
   ];
   var states = {
-    orig: {
-      rows: base,
-      text: "The sparse code of the original image embedding. Most of the weight sits on a handful of atoms."
-    },
-    att: {
-      rows: base.map(function (r) { return r.k === "sheep" ? { k: r.k, t: r.t, v: 0.09, out: true } : r; }),
-      text: "Attenuation turns the source concept down. The scene stays, but the evidence for the main object is weakened."
-    },
-    swap: {
-      rows: base.map(function (r) { return r.k === "white" ? { k: "black", t: r.t, v: r.v, inn: true, was: "white" } : r; }),
-      text: "Swap moves the activation from one attribute to another of the same type. Same sheep, same field, wrong color."
-    },
-    trans: {
-      rows: base.map(function (r) { return r.k === "sheep" ? { k: "zebra", t: r.t, v: r.v, inn: true, was: "sheep" } : r; }),
-      text: "Transplant replaces the source atom with the target and keeps the original strength. In the COCO example, the result has cosine 0.78 to the original and retrieves zebras."
-    }
+    orig: { rows: base, text: "The sparse code of the original image embedding. Most of the weight sits on a handful of atoms." },
+    att: { rows: base.map(function (r) { return r.k === "sheep" ? { k: r.k, t: r.t, v: 0.09, out: true } : r; }),
+      text: "Attenuation turns the source concept down. The scene stays, but the evidence for the main object is weakened." },
+    swap: { rows: base.map(function (r) { return r.k === "white" ? { k: "black", t: r.t, v: r.v, inn: true, was: "white" } : r; }),
+      text: "Swap moves the activation from one attribute to another of the same type. Same sheep, same field, wrong colour." },
+    trans: { rows: base.map(function (r) { return r.k === "sheep" ? { k: "zebra", t: r.t, v: r.v, inn: true, was: "sheep" } : r; }),
+      text: "Transplant replaces the source atom with the target and keeps the original strength. In the COCO example, the result has cosine 0.78 to the original and retrieves zebras." }
   };
-  var bars = document.getElementById("bars");
-  var readout = document.getElementById("readout");
-  var max = 0.45;
-
-  // build rows once so widths can animate
-  base.forEach(function (r, i) {
+  var bars = document.getElementById("bars"), readout = document.getElementById("readout"), max = 0.45;
+  base.forEach(function () {
     var row = document.createElement("div");
     row.className = "barrow";
-    row.innerHTML = '<span class="name"><i class="dot"></i><span class="lbl"></span></span>' +
-      '<div class="track"><div class="fill"></div></div><span class="val"></span>';
+    row.innerHTML = '<span class="name"><i class="dot"></i><span class="lbl"></span></span><div class="track"><div class="fill"></div></div><span class="val"></span>';
     bars.appendChild(row);
   });
-
   function render(key) {
     var s = states[key];
     Array.prototype.forEach.call(bars.children, function (row, i) {
       var r = s.rows[i];
       row.className = "barrow" + (r.inn ? " changed-in" : "") + (r.out ? " changed-out" : "");
-      row.querySelector(".dot").style.background = C[r.t];
+      row.querySelector(".dot").style.background = COL[r.t];
       row.querySelector(".lbl").textContent = r.inn ? r.was + " → " + r.k : r.k;
       var f = row.querySelector(".fill");
       f.style.width = (r.v / max * 100) + "%";
-      f.style.backgroundColor = r.inn ? "var(--target)" : (r.out ? "var(--source)" : C[r.t]);
+      f.style.backgroundColor = r.inn ? "var(--acc)" : (r.out ? "var(--src)" : COL[r.t]);
       row.querySelector(".val").textContent = r.v.toFixed(2);
     });
     readout.textContent = s.text;
-    document.querySelectorAll(".op").forEach(function (b) {
-      b.setAttribute("aria-pressed", b.dataset.op === key ? "true" : "false");
-    });
+    document.querySelectorAll(".op").forEach(function (b) { b.setAttribute("aria-pressed", b.dataset.op === key ? "true" : "false"); });
   }
-  document.querySelectorAll(".op").forEach(function (b) {
-    b.addEventListener("click", function () { render(b.dataset.op); });
-  });
+  document.querySelectorAll(".op").forEach(function (b) { b.addEventListener("click", function () { render(b.dataset.op); }); });
   render("orig");
 
+  /* ---------- results: dumbbells ---------- */
+  /* [label, sub, without, with, lowerIsBetter, group, unit] */
+  var R = [
+    ["COLA", "multi-object binding", 35.56, 39.05, false, "Binding & detail", ""],
+    ["MMVP-VLM", "fine visual detail: colour, viewpoint, state", 29.62, 35.56, false, "Binding & detail", ""],
+    ["Relation-swap failures", "edited caption still wins", 3.27, 1.10, true, "Robustness to small edits", "%"],
+    ["Attribute-swap failures", "edited caption still wins", 4.65, 1.60, true, "Robustness to small edits", "%"],
+    ["Mutual reciprocity", "neighbours agree in both directions", 46.57, 51.41, false, "Embedding geometry", "%"],
+    ["SigLIP average", "pairwise sigmoid loss", 45.83, 49.46, false, "Beyond CLIP's loss", ""]
+  ];
+  var dh = document.getElementById("dumbbells"), groups = [];
+  R.forEach(function (r) { if (groups.indexOf(r[5]) < 0) groups.push(r[5]); });
+  groups.forEach(function (g) {
+    var rows = R.filter(function (r) { return r[5] === g; }), vals = [];
+    rows.forEach(function (r) { vals.push(r[2], r[3]); });
+    var lower = rows[0][4];
+    var min = lower ? 0 : Math.floor((Math.min.apply(null, vals) - 3) / 5) * 5;
+    var max = lower ? 5 : Math.ceil((Math.max.apply(null, vals) + 3) / 5) * 5;
+    var html = '<div class="dgroup"><h3>' + g + '</h3>';
+    rows.forEach(function (r) {
+      function x(v) { var f = (v - min) / (max - min); return (r[4] ? 1 - f : f) * 100; }
+      var xb = x(r[2]), xg = x(r[3]), d = r[3] - r[2];
+      html += '<div class="db" role="group" aria-label="' + r[0] + ': without LACE ' + r[2] + r[6] + ', with LACE ' + r[3] + r[6] + '">' +
+        '<div class="lab">' + r[0] + '<small>' + r[1] + '</small></div>' +
+        '<div class="line" aria-hidden="true"><span class="seg" style="left:' + Math.min(xb, xg) + '%;width:' + Math.abs(xg - xb) + '%"></span>' +
+        '<span class="dot b" style="left:' + xb + '%"></span><span class="dot g" style="left:' + xg + '%"></span>' +
+        '<span class="lbl" style="left:' + xb + '%">' + r[2].toFixed(2) + r[6] + '</span><span class="lbl g" style="left:' + xg + '%">' + r[3].toFixed(2) + r[6] + '</span></div>' +
+        '<div class="delta">' + (d > 0 ? "+" : "−") + Math.abs(d).toFixed(2) + '<small>' + (r[4] ? "fewer failures" : "points") + '</small></div></div>';
+    });
+    dh.insertAdjacentHTML("beforeend", html + '</div>');
+  });
+
+  /* ---------- copy BibTeX ---------- */
   var btn = document.getElementById("copy-bib");
   btn.addEventListener("click", function () {
-    var text = document.getElementById("bibtext").textContent;
-    function selectIt() {
-      var range = document.createRange();
-      range.selectNodeContents(document.getElementById("bibtext"));
-      var sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(range);
-      btn.textContent = "Selected";
-    }
-    try {
-      navigator.clipboard.writeText(text).then(function () { btn.textContent = "Copied"; }, selectIt);
-    } catch (e) { selectIt(); }
+    var pre = document.getElementById("bibtext"), text = pre.textContent;
+    function selectIt() { var rg = document.createRange(); rg.selectNodeContents(pre); var sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(rg); btn.textContent = "Selected"; }
+    try { navigator.clipboard.writeText(text).then(function () { btn.textContent = "Copied"; }, selectIt); } catch (e) { selectIt(); }
     setTimeout(function () { btn.textContent = "Copy"; }, 1800);
   });
 })();
